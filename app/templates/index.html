@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent NIDS Dashboard</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* --- THEME SETTINGS --- */
+        body { background-color: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+        
+        .container { max-width: 95%; margin-top: 30px; }
+        
+        /* Glass-like Cards */
+        .card {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .card-header {
+            background-color: #252525;
+            border-bottom: 1px solid #333;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        /* Table Styling */
+        .table-container { height: 500px; overflow-y: scroll; scrollbar-width: thin; }
+        .table-hover tbody tr:hover { color: #fff; background-color: #2c2c2c; }
+        .table { color: #ccc; }
+
+        /* Animations */
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .pulse { animation: pulse-animation 2s infinite; }
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4); }
+            100% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        }
+
+        /* Custom Protocol Badges */
+        .badge-tcp { background-color: rgba(76, 201, 240, 0.2); color: #4CC9F0; border: 1px solid #4CC9F0; }
+        .badge-udp { background-color: rgba(114, 9, 183, 0.2); color: #B5179E; border: 1px solid #B5179E; }
+        .badge-icmp { background-color: rgba(247, 37, 133, 0.2); color: #F72585; border: 1px solid #F72585; }
+        
+        /* Location Flag Styling */
+        .flag-icon { font-size: 1.2rem; margin-right: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold">🛡️ Intelligent NIDS <span style="color: #4CC9F0;">Monitor</span></h2>
+        <span class="badge bg-dark border border-secondary text-secondary p-2" id="connection-status">Initializing...</span>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Protocol Analytics</span>
+                    <small class="text-muted">Live Data</small>
+                </div>
+                <div class="card-body d-flex justify-content-center align-items-center">
+                    <div style="height: 300px; width: 100%;">
+                        <canvas id="trafficChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header">Live Traffic Feed</div>
+                <div class="card-body p-0">
+                    <div class="table-container">
+                        <table class="table table-borderless table-hover mb-0 align-middle">
+                            <thead class="sticky-top" style="background: #252525;">
+                                <tr class="text-muted">
+                                    <th>TIMESTAMP</th>
+                                    <th>STATUS</th>
+                                    <th>PROTOCOL</th>
+                                    <th>LOCATION</th> <th>SOURCE</th>
+                                    <th>DESTINATION</th>
+                                    <th>PORT</th>
+                                </tr>
+                            </thead>
+                            <tbody id="packet-table-body" style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    document.addEventListener("DOMContentLoaded", function() {
+        var socket = io();
+
+        // --- 1. CHART SETUP ---
+        var ctx = document.getElementById('trafficChart').getContext('2d');
+        var trafficChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['TCP', 'UDP', 'ICMP', 'Other'],
+                datasets: [{
+                    data: [0, 0, 0, 0],
+                    backgroundColor: ['#4CC9F0', '#7209B7', '#F72585', '#4895ef'],
+                    borderWidth: 0,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#ccc', usePointStyle: true, padding: 20 }
+                    }
+                }
+            }
+        });
+
+        // --- 2. CONNECTION STATUS ---
+        socket.on('connect', function() {
+            var badge = document.getElementById('connection-status');
+            badge.className = "badge bg-success border border-success p-2 pulse";
+            badge.innerText = "● System Online";
+        });
+        
+        socket.on('disconnect', function() {
+            var badge = document.getElementById('connection-status');
+            badge.className = "badge bg-danger border border-danger p-2";
+            badge.innerText = "○ Disconnected";
+        });
+
+        // --- 3. HANDLE NEW PACKET ---
+        socket.on('new_packet', function(data) {
+            var tableBody = document.getElementById('packet-table-body');
+            var newRow = document.createElement('tr');
+            newRow.classList.add('fade-in');
+
+            // A. Alert Logic
+            var alertStatus = `<span class="text-secondary" style="font-size: 0.8rem;">● OK</span>`;
+            if (data.is_attack) {
+                newRow.style.backgroundColor = "rgba(247, 37, 133, 0.15)"; 
+                alertStatus = `<span class="text-danger fw-bold">⚠️ SCAN</span>`;
+            }
+
+            // B. Badge Color Logic
+            var badgeClass = "badge bg-secondary";
+            if(data.protocol === 'TCP') badgeClass = "badge badge-tcp";
+            if(data.protocol === 'UDP') badgeClass = "badge badge-udp";
+            if(data.protocol === 'ICMP') badgeClass = "badge badge-icmp";
+
+            // C. Insert HTML
+            newRow.innerHTML = `
+                <td class="text-muted">${data.timestamp}</td>
+                <td>${alertStatus}</td>
+                <td><span class="${badgeClass}">${data.protocol}</span></td>
+                <td>${data.location}</td> <td>${data.src_ip}</td>
+                <td>${data.dst_ip}</td>
+                <td>${data.dst_port}</td>
+            `;
+            
+            // D. Add to Table & Limit Rows
+            tableBody.prepend(newRow);
+            if (tableBody.children.length > 100) tableBody.removeChild(tableBody.lastChild);
+
+            // E. Update Chart
+            if (data.protocol === 'TCP') trafficChart.data.datasets[0].data[0]++;
+            else if (data.protocol === 'UDP') trafficChart.data.datasets[0].data[1]++;
+            else if (data.protocol === 'ICMP') trafficChart.data.datasets[0].data[2]++;
+            else trafficChart.data.datasets[0].data[3]++;
+            
+            trafficChart.update('none');
+        });
+    });
+</script>
+
+</body>
+</html>

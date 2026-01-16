@@ -1,0 +1,37 @@
+import eventlet
+# Essential: Monkey patch allows the server to handle many connections at once
+eventlet.monkey_patch()
+
+from app import create_app, socketio
+# This is the line that was missing in your old file!
+from app.sniffer.core import start_sniffer_service
+import threading
+
+app = create_app()
+
+if __name__ == '__main__':
+    print("[-] Starting Intelligent NIDS...")
+    
+    # 1. Start the Real Sniffer in a background thread
+    # daemon=True means this thread dies when the main program dies
+    sniff_thread = threading.Thread(target=start_sniffer_service, daemon=True)
+    sniff_thread.start()
+    
+    # 2. Start the Web Server
+    print("[+] Web Dashboard Active at http://0.0.0.0:5000")
+    # use_reloader=False is CRITICAL. It stops the "RLock" errors you saw.
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=Falsimport eventlet
+# Essential: Monkey patch allows the server to handle many connections at once
+eventlet.monkey_patch()
+
+from app import create_app, socketio
+
+app = create_app()
+
+if __name__ == '__main__':
+    print("[-] Starting Intelligent NIDS...")
+    print("[-] Dashboard is live on Port 5000")
+    
+    # Start the Web Server
+    # host='0.0.0.0' is CRITICAL. It allows Windows to connect to Kali.
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
