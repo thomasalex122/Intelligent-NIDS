@@ -3,140 +3,351 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Intelligent NIDS Dashboard</title>
+    <title>Intelligent NIDS // PRO</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <style>
-        body { background-color: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
-        .container { max-width: 95%; margin-top: 30px; }
-        .card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .card-header { background-color: #252525; border-bottom: 1px solid #333; font-weight: 600; text-transform: uppercase; font-size: 0.9rem; color: #888; }
-        .table-container { height: 500px; overflow-y: scroll; scrollbar-width: thin; }
-        .table-hover tbody tr:hover { color: #fff; background-color: #2c2c2c; }
-        .table { color: #ccc; }
-        .fade-in { animation: fadeIn 0.4s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-        .pulse { animation: pulse-animation 2s infinite; }
-        @keyframes pulse-animation { 0% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4); } 100% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } }
-        .badge-tcp { background-color: rgba(76, 201, 240, 0.2); color: #4CC9F0; border: 1px solid #4CC9F0; }
-        .badge-udp { background-color: rgba(114, 9, 183, 0.2); color: #B5179E; border: 1px solid #B5179E; }
-        .badge-icmp { background-color: rgba(247, 37, 133, 0.2); color: #F72585; border: 1px solid #F72585; }
+        /* --- MODERN CYBER THEME --- */
+        :root {
+            --bg-dark: #0f111a;
+            --sidebar-bg: #0d1117;
+            --card-bg: #161b22;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-red: #f85149;
+            --accent-green: #238636;
+            --border-color: #30363d;
+        }
+
+        body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        
+        /* LAYOUT */
+        .wrapper { display: flex; height: 100vh; width: 100%; }
+        
+        /* SIDEBAR */
+        .sidebar {
+            width: 260px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column;
+            padding: 20px;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+
+        /* LOGO STYLE */
+        .brand { 
+            font-size: 1.2rem; 
+            font-weight: 800; 
+            color: #fff; 
+            margin-bottom: 40px; 
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            display: flex; align-items: center;
+        }
+        .brand i { color: var(--accent-blue); margin-right: 10px; font-size: 1.4rem; }
+        
+        .nav-item {
+            padding: 14px 15px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-muted);
+            display: flex; align-items: center;
+            font-weight: 500;
+        }
+        .nav-item:hover { background-color: rgba(56, 139, 253, 0.1); color: var(--accent-blue); }
+        .nav-item.active { background-color: rgba(56, 139, 253, 0.15); color: #fff; border-left: 3px solid var(--accent-blue); }
+        .nav-item i { margin-right: 15px; width: 20px; text-align: center; }
+        
+        /* MAIN CONTENT AREA */
+        .main-content { 
+            flex: 1; 
+            padding: 30px; 
+            overflow-y: auto; 
+            position: relative; 
+            background: radial-gradient(circle at top right, #1c2128 0%, #0f111a 60%);
+        }
+        
+        /* SECTIONS & ANIMATION */
+        .view-section { display: none; }
+        .view-section.active { display: block; animation: slideUp 0.4s ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* CARDS & TABLES */
+        .glass-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        .glass-card:hover { border-color: #58a6ff; }
+
+        .table-custom { width: 100%; border-collapse: separate; border-spacing: 0 4px; }
+        .table-custom thead th { 
+            color: var(--text-muted); 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            padding: 10px;
+        }
+        /* FIX: FORCE TIME COLOR TO BE VISIBLE */
+        .table-custom td { 
+            padding: 12px 10px; 
+            background: rgba(255,255,255,0.02); 
+            font-family: 'Consolas', monospace; 
+            font-size: 0.9rem; 
+            color: #e0e0e0; /* Bright Grey text */
+        }
+        .table-custom tr { transition: background 0.2s; }
+        .table-custom tr:hover td { background: rgba(255,255,255,0.05); }
+
+        /* ROW ANIMATION */
+        .new-row { animation: flashRow 1s ease-out; }
+        @keyframes flashRow { 0% { background-color: rgba(88, 166, 255, 0.2); } 100% { background-color: transparent; } }
+        
+        /* BADGES */
+        .badge-cyber { padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+        .badge-tcp { background: rgba(88, 166, 255, 0.1); color: #58a6ff; border: 1px solid rgba(88, 166, 255, 0.3); }
+        .badge-udp { background: rgba(210, 161, 6, 0.1); color: #d2a106; border: 1px solid rgba(210, 161, 6, 0.3); }
+        .alert-row td { background: rgba(248, 81, 73, 0.1) !important; border-left: 2px solid var(--accent-red); }
+        
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold">🛡️ Intelligent NIDS <span style="color: #4CC9F0;">Monitor</span></h2>
-        <span class="badge bg-dark border border-secondary text-secondary p-2" id="connection-status">Initializing...</span>
+<div class="wrapper">
+    <div class="sidebar">
+        <div class="brand">
+            <i class="fas fa-network-wired"></i> CYBER<br>SENTINEL
+        </div>
+        
+        <div class="nav-item active" onclick="switchView('dashboard')">
+            <i class="fas fa-chart-pie"></i> Dashboard
+        </div>
+        <div class="nav-item" onclick="switchView('alerts')">
+            <i class="fas fa-radiation" style="color: var(--accent-red);"></i> Threat Center
+            <span class="badge bg-danger ms-auto shadow-sm" id="alert-count" style="display:none; font-size: 0.7rem;">0</span>
+        </div>
+        <div class="nav-item" onclick="switchView('firewall')">
+            <i class="fas fa-shield-virus"></i> Firewall IPS
+        </div>
+        
+        <div style="margin-top: auto;">
+            <div class="glass-card p-3 text-center" style="background: rgba(0,0,0,0.3);">
+                <small class="text-muted" style="font-size: 0.7rem;">SYSTEM STATUS</small><br>
+                <span id="connection-status" style="color: var(--accent-green); font-weight: bold;">
+                    <i class="fas fa-circle fa-xs"></i> ONLINE
+                </span>
+            </div>
+        </div>
     </div>
 
-    <div class="row g-4">
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-header">Traffic Analytics</div>
-                <div class="card-body d-flex justify-content-center align-items-center">
-                    <div style="height: 300px; width: 100%;">
+    <div class="main-content">
+
+        <div id="view-dashboard" class="view-section active">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Network Overview</h2>
+                <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()"><i class="fas fa-sync"></i></button>
+            </div>
+            
+            <div class="row g-4 mb-4">
+                <div class="col-md-3">
+                    <div class="glass-card text-center">
+                        <h6 class="text-muted mb-2">TOTAL PACKETS</h6>
+                        <h1 id="total-packets" style="color: var(--accent-blue);">0</h1>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div class="glass-card" style="height: 140px; padding: 10px;">
                         <canvas id="trafficChart"></canvas>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="col-md-8">
-            <div class="card h-100">
-                <div class="card-header">Live Traffic Feed</div>
-                <div class="card-body p-0">
-                    <div class="table-container">
-                        <table class="table table-borderless table-hover mb-0 align-middle">
-                            <thead class="sticky-top" style="background: #252525;">
-                                <tr class="text-muted">
-                                    <th>TIMESTAMP</th>
-                                    <th>STATUS</th>
-                                    <th>PROTOCOL</th>
-                                    <th>LOCATION</th> <th>SOURCE</th>
-                                    <th>DESTINATION</th>
-                                    <th>PORT</th>
-                                </tr>
-                            </thead>
-                            <tbody id="packet-table-body" style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
-                                </tbody>
-                        </table>
-                    </div>
+            <div class="glass-card">
+                <h5 class="mb-3 text-muted" style="font-size: 0.9rem; letter-spacing: 1px;">LIVE TRAFFIC FEED</h5>
+                <div style="height: 400px; overflow-y: auto; scrollbar-width: thin;">
+                    <table class="table-custom">
+                        <thead>
+                            <tr>
+                                <th>Time</th> <th>Proto</th> <th>Source IP</th> <th>Destination IP</th> <th>Dst Port</th>
+                            </tr>
+                        </thead>
+                        <tbody id="normal-table">
+                            </tbody>
+                    </table>
                 </div>
             </div>
         </div>
+
+        <div id="view-alerts" class="view-section">
+            <h2 class="mb-4 text-danger"><i class="fas fa-exclamation-circle"></i> Active Threats</h2>
+            <div class="glass-card" style="border-top: 4px solid var(--accent-red);">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>Time</th> <th>Attacker</th> <th>Target</th> <th>Alert Type</th> <th>Risk Level</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alert-table">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-firewall" class="view-section">
+            <h2 class="mb-4">IPS Blocking Log</h2>
+            <div class="glass-card">
+                <div class="alert alert-dark d-flex align-items-center" role="alert" style="background: rgba(35, 134, 54, 0.1); border: 1px solid var(--accent-green); color: var(--accent-green);">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <div><strong>Active Defense Engine</strong> is running. Malicious IPs are being dropped automatically.</div>
+                </div>
+                
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>Time Blocked</th> <th>IP Address</th> <th>Reason</th> <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="blocked-table">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 </div>
 
-<script type="text/javascript">
+<script>
+    // --- UI LOGIC ---
+    let alertCount = 0; // Track notifications
+
+    function switchView(viewName) {
+        // 1. Hide all sections
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        
+        // 2. Show selected section
+        document.getElementById('view-' + viewName).classList.add('active');
+        
+        // 3. Highlight menu item
+        const menuIndex = viewName === 'dashboard' ? 0 : viewName === 'alerts' ? 1 : 2;
+        document.querySelectorAll('.nav-item')[menuIndex].classList.add('active');
+
+        // 4. RESET BADGE LOGIC
+        if (viewName === 'alerts') {
+            alertCount = 0; // Reset counter
+            const badge = document.getElementById('alert-count');
+            badge.innerText = '0';
+            badge.style.display = 'none'; // Hide badge
+        }
+    }
+
+    // --- SOCKET LOGIC ---
     document.addEventListener("DOMContentLoaded", function() {
         var socket = io();
+        let totalPackets = 0;
 
+        // Chart Config
         var ctx = document.getElementById('trafficChart').getContext('2d');
         var trafficChart = new Chart(ctx, {
-            type: 'doughnut',
+            type: 'bar',
             data: {
-                labels: ['TCP', 'UDP', 'ICMP', 'Other'],
+                labels: ['TCP', 'UDP', 'ICMP', 'ARP'],
                 datasets: [{
+                    label: 'Packets',
                     data: [0, 0, 0, 0],
-                    backgroundColor: ['#4CC9F0', '#7209B7', '#F72585', '#4895ef'],
-                    borderWidth: 0,
-                    hoverOffset: 10
+                    backgroundColor: ['#58a6ff', '#d2a106', '#f85149', '#8b949e'],
+                    borderRadius: 4,
+                    barThickness: 40
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#ccc', usePointStyle: true, padding: 20 } } } }
-        });
-
-        socket.on('connect', function() {
-            var badge = document.getElementById('connection-status');
-            badge.className = "badge bg-success border border-success p-2 pulse";
-            badge.innerText = "● System Online";
-        });
-        
-        socket.on('disconnect', function() {
-            var badge = document.getElementById('connection-status');
-            badge.className = "badge bg-danger border border-danger p-2";
-            badge.innerText = "○ Disconnected";
-        });
-
-        socket.on('new_packet', function(data) {
-            var tableBody = document.getElementById('packet-table-body');
-            var newRow = document.createElement('tr');
-            newRow.classList.add('fade-in');
-
-            var alertStatus = `<span class="text-secondary" style="font-size: 0.8rem;">● OK</span>`;
-            if (data.is_attack) {
-                newRow.style.backgroundColor = "rgba(247, 37, 133, 0.15)"; 
-                alertStatus = `<span class="text-danger fw-bold">⚠️ SCAN</span>`;
+            options: { 
+                indexAxis: 'y', 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { legend: { display: false } },
+                scales: { 
+                    x: { display: false }, 
+                    y: { ticks: { color: '#8b949e', font: {family: 'Segoe UI', size: 11} }, grid: {display: false} } 
+                }
             }
+        });
 
-            var badgeClass = "badge bg-secondary";
-            if(data.protocol === 'TCP') badgeClass = "badge badge-tcp";
-            if(data.protocol === 'UDP') badgeClass = "badge badge-udp";
-            if(data.protocol === 'ICMP') badgeClass = "badge badge-icmp";
+        // 1. New Packet Handler
+        socket.on('new_packet', function(data) {
+            totalPackets++;
+            document.getElementById('total-packets').innerText = totalPackets;
 
-            newRow.innerHTML = `
-                <td class="text-muted">${data.timestamp}</td>
-                <td>${alertStatus}</td>
-                <td><span class="${badgeClass}">${data.protocol}</span></td>
-                <td>${data.location}</td> <td>${data.src_ip}</td>
-                <td>${data.dst_ip}</td>
-                <td>${data.dst_port}</td>
-            `;
-            
-            tableBody.prepend(newRow);
-            if (tableBody.children.length > 100) tableBody.removeChild(tableBody.lastChild);
-
+            // Update Chart
             if (data.protocol === 'TCP') trafficChart.data.datasets[0].data[0]++;
             else if (data.protocol === 'UDP') trafficChart.data.datasets[0].data[1]++;
             else if (data.protocol === 'ICMP') trafficChart.data.datasets[0].data[2]++;
             else trafficChart.data.datasets[0].data[3]++;
-            
             trafficChart.update('none');
+
+            // Handle Threats
+            if (data.is_attack || data.is_threat) {
+                // Add to Alert Table
+                const row = `
+                    <tr class="alert-row new-row">
+                        <td style="color:#fff">${data.timestamp}</td>
+                        <td class="fw-bold text-danger">${data.src_ip}</td>
+                        <td>${data.dst_ip}</td>
+                        <td>PORT SCAN</td>
+                        <td><span class="badge bg-danger">CRITICAL</span></td>
+                    </tr>`;
+                document.getElementById('alert-table').insertAdjacentHTML('afterbegin', row);
+                
+                // UPDATE NOTIFICATION BADGE (Only if not already viewing alerts)
+                if (!document.getElementById('view-alerts').classList.contains('active')) {
+                    alertCount++;
+                    const badge = document.getElementById('alert-count');
+                    badge.style.display = 'inline-block';
+                    badge.innerText = alertCount > 99 ? '99+' : alertCount;
+                }
+                
+            } else {
+                // Add to Normal Table
+                let protoClass = 'badge-secondary';
+                if(data.protocol === 'TCP') protoClass = 'badge-tcp';
+                if(data.protocol === 'UDP') protoClass = 'badge-udp';
+
+                const row = `
+                    <tr class="new-row">
+                        <td style="color: #e0e0e0">${data.timestamp}</td>
+                        <td><span class="badge-cyber ${protoClass}">${data.protocol}</span></td>
+                        <td style="color: #8b949e">${data.src_ip}</td>
+                        <td style="color: #8b949e">${data.dst_ip}</td>
+                        <td style="color: #58a6ff">${data.dst_port}</td>
+                    </tr>`;
+                
+                const table = document.getElementById('normal-table');
+                table.insertAdjacentHTML('afterbegin', row);
+                // Keep performance high: remove old rows
+                if(table.children.length > 40) table.lastElementChild.remove();
+            }
+        });
+
+        // 2. Blocked IP Handler
+        socket.on('ip_blocked', function(data) {
+            const row = `
+                <tr class="new-row">
+                    <td style="color:#fff">${data.time}</td>
+                    <td style="color:#f85149; font-weight:bold">${data.ip}</td>
+                    <td>${data.reason}</td>
+                    <td><span class="badge bg-danger"><i class="fas fa-lock"></i> BLOCKED</span></td>
+                </tr>`;
+            document.getElementById('blocked-table').insertAdjacentHTML('afterbegin', row);
         });
     });
 </script>
