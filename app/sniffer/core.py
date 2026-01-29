@@ -1,84 +1,108 @@
-from scapy.all import sniff, IP, TCP, UDP, ICMP
-from app import db, socketio
-from app.models import PacketLog
-from config import Config
+import logging
+from scapy.all import *
+from app import socketio
 from collections import defaultdict
-import time
-import requests
-import ipaddress
+from datetime import datetime
+import os
 
-# Global Variables
-scan_tracker = defaultdict(list)
-geo_cache = {}
+# --- CONFIGURATION: ACTIVE DEFENSE ---
+# 1. Whitelist: IPs that will NEVER be blocked (Safety Net)
+# Add your Windows IP here if you know it (e.g., '192.168.1.5') to prevent locking yourself out.
+WHITELIST = {
+    '127.0.0.1',       # Localhost
+    '0.0.0.0',         # Broadcast
+    '192.168.1.1',     # Router Gateway
+    '8.8.8.8',         # Google DNS
+}
 
-def get_location(ip_addr):
-    """Returns the Country Flag for a given IP."""
-    if ip_addr in geo_cache:
-        return geo_cache[ip_addr]
+# 2. Blocked Memory: Remembers who is banned so we don't spam the firewall
+BLOCKED_IPS = set()
+
+# 3. Connection Tracking: Counts packets per second for each IP
+connection_count = defaultdict(int)
+last_reset_time = datetime.now()
+
+def block_ip(ip_address):
+    """
+    Executes the Linux Firewall command to drop all packets from an attacker.
+    """
+    # Safety Checks
+    if ip_address in WHITELIST:
+        print(f"⚠️ SAFETY: Skipped blocking Whitelisted IP: {ip_address}")
+        return
+    if ip_address in BLOCKED_IPS:
+        return
+
+    print(f"🚫 ACTIVATING IPS: Blocking Attacker {ip_address}...")
     
-    try:
-        ip_obj = ipaddress.ip_address(ip_addr)
-        if ip_obj.is_private or ip_obj.is_loopback:
-            geo_cache[ip_addr] = "🏠 LAN"
-            return "🏠 LAN"
-    except ValueError:
-        return "Unknown"
-
-    try:
-        response = requests.get(f"http://ip-api.com/json/{ip_addr}", timeout=2)
-        if response.status_code == 200 and response.json()['status'] == 'success':
-            country = response.json()['countryCode']
-            flag = "".join([chr(127397 + ord(c)) for c in country.upper()])
-            loc = f"{flag} {country}"
-            geo_cache[ip_addr] = loc
-            return loc
-    except:
-        pass
+    # THE KILL COMMAND: Tells Linux Kernel to DROP packets from this IP
+    os.system(f"sudo iptables -A INPUT -s {ip_address} -j DROP")
     
-    return "🌐 NET"
+    # Update Memory
+    BLOCKED_IPS.add(ip_address)
+
+    # Notify Dashboard (Update the Firewall Log UI)
+    socketio.emit('ip_blocked', {
+        'ip': ip_address,
+        'time': datetime.now().strftime("%H:%M:%S"),
+        'reason': 'Port Scan / Flood Detected'
+    })
 
 def packet_callback(packet):
+    global last_reset_time, connection_count
+
     if IP in packet:
         src_ip = packet[IP].src
         dst_ip = packet[IP].dst
-        proto = "OTHER"
-        dst_port = "-"
+        proto = packet[IP].proto
+        
+        # Determine Protocol Name
+        if proto == 6: protocol_name = 'TCP'
+        elif proto == 17: protocol_name = 'UDP'
+        elif proto == 1: protocol_name = 'ICMP'
+        else: protocol_name = 'Other'
 
-        if TCP in packet:
-            proto = "TCP"
-            dst_port = str(packet[TCP].dport)
-        elif UDP in packet:
-            proto = "UDP"
-            dst_port = str(packet[UDP].dport)
-        elif ICMP in packet:
-            proto = "ICMP"
+        # Get Destination Port (if applicable)
+        dst_port = packet[TCP].dport if TCP in packet else packet[UDP].dport if UDP in packet else 0
+
+        # --- DETECTION LOGIC ---
+        
+        # 1. Reset counters every 1 second
+        current_time = datetime.now()
+        if (current_time - last_reset_time).total_seconds() > 1:
+            connection_count.clear()
+            last_reset_time = current_time
+
+        # 2. Count packets from this IP
+        connection_count[src_ip] += 1
+        
+        # 3. CHECK RULE: Is this an attack? (>15 packets/sec)
+        is_threat = False
+        if connection_count[src_ip] > 15:
+            is_threat = True
             
-        # --- ATTACK DETECTION (Velocity Check) ---
-        current_time = time.time()
-        scan_tracker[src_ip].append(current_time)
-        # Keep only packets from the last 1 second
-        scan_tracker[src_ip] = [t for t in scan_tracker[src_ip] if current_time - t < 1.0]
-        
-        is_attack = False
-        if len(scan_tracker[src_ip]) > 20: # RULE: >20 packets/sec = Attack
-            is_attack = True
-            print(f"🚨 ALERT: Scan from {src_ip}")
-        
-        # Get Location
-        src_location = get_location(src_ip)
+            # >>> TRIGGER ACTIVE DEFENSE <<<
+            block_ip(src_ip)
 
-        # Send to Dashboard
+        # --- SEND TO DASHBOARD ---
         socketio.emit('new_packet', {
             'src_ip': src_ip,
             'dst_ip': dst_ip,
-            'protocol': proto,
             'dst_port': dst_port,
-            'timestamp': time.strftime('%H:%M:%S'),
-            'is_attack': is_attack,
-            'location': src_location
+            'protocol': protocol_name,
+            'timestamp': datetime.now().strftime("%H:%M:%S"),
+            'is_threat': is_threat
         })
 
-def start_sniffer_service(app_instance):
-    with app_instance.app_context():
-        print(f"[*] Sniffer started on {Config.SNIFF_INTERFACE}")
-        sniff(iface=Config.SNIFF_INTERFACE, prn=packet_callback, store=0)
+# ... (rest of your imports and code) ...
+
+# CHANGE THIS LINE (Add *args)
+def start_sniffer_service(*args):
+    """Starts the packet capture loop."""
+    print("🛡️  Intelligent NIDS Started...")
+    print("🔥 Active Defense (IPS) is ENABLED.")
+    try:
+        # Sniff on eth0. Store=0 prevents memory leaks.
+        sniff(iface="eth0", prn=packet_callback, store=0)
+    except Exception as e:
+        print(f"Error in sniffer: {e}")

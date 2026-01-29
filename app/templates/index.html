@@ -40,7 +40,6 @@
             z-index: 10;
         }
 
-        /* LOGO STYLE */
         .brand { 
             font-size: 1.2rem; 
             font-weight: 800; 
@@ -87,9 +86,7 @@
             border-radius: 12px;
             padding: 20px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-            transition: transform 0.2s;
         }
-        .glass-card:hover { border-color: #58a6ff; }
 
         .table-custom { width: 100%; border-collapse: separate; border-spacing: 0 4px; }
         .table-custom thead th { 
@@ -99,13 +96,12 @@
             letter-spacing: 1px; 
             padding: 10px;
         }
-        /* FIX: FORCE TIME COLOR TO BE VISIBLE */
         .table-custom td { 
             padding: 12px 10px; 
             background: rgba(255,255,255,0.02); 
             font-family: 'Consolas', monospace; 
             font-size: 0.9rem; 
-            color: #e0e0e0; /* Bright Grey text */
+            color: #e0e0e0; 
         }
         .table-custom tr { transition: background 0.2s; }
         .table-custom tr:hover td { background: rgba(255,255,255,0.05); }
@@ -229,26 +225,23 @@
 
 <script>
     // --- UI LOGIC ---
-    let alertCount = 0; // Track notifications
+    let alertCount = 0; 
 
     function switchView(viewName) {
-        // 1. Hide all sections
         document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
         
-        // 2. Show selected section
         document.getElementById('view-' + viewName).classList.add('active');
         
-        // 3. Highlight menu item
         const menuIndex = viewName === 'dashboard' ? 0 : viewName === 'alerts' ? 1 : 2;
         document.querySelectorAll('.nav-item')[menuIndex].classList.add('active');
 
-        // 4. RESET BADGE LOGIC
+        // Reset Notification Badge
         if (viewName === 'alerts') {
-            alertCount = 0; // Reset counter
+            alertCount = 0; 
             const badge = document.getElementById('alert-count');
             badge.innerText = '0';
-            badge.style.display = 'none'; // Hide badge
+            badge.style.display = 'none'; 
         }
     }
 
@@ -296,7 +289,7 @@
             trafficChart.update('none');
 
             // Handle Threats
-            if (data.is_attack || data.is_threat) {
+            if (data.is_threat) {
                 // Add to Alert Table
                 const row = `
                     <tr class="alert-row new-row">
@@ -308,7 +301,7 @@
                     </tr>`;
                 document.getElementById('alert-table').insertAdjacentHTML('afterbegin', row);
                 
-                // UPDATE NOTIFICATION BADGE (Only if not already viewing alerts)
+                // Update Badge
                 if (!document.getElementById('view-alerts').classList.contains('active')) {
                     alertCount++;
                     const badge = document.getElementById('alert-count');
@@ -333,7 +326,6 @@
                 
                 const table = document.getElementById('normal-table');
                 table.insertAdjacentHTML('afterbegin', row);
-                // Keep performance high: remove old rows
                 if(table.children.length > 40) table.lastElementChild.remove();
             }
         });
